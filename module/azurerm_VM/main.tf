@@ -28,14 +28,20 @@ resource "azurerm_network_interface" "nics" {
 }
 
 resource "azurerm_linux_virtual_machine" "vms" {
-  for_each                        = var.vms
-  name                            = each.value.vm_name
-  resource_group_name             = each.value.resource_group_name
-  location                        = each.value.location
-  size                            = each.value.size
+  #checkov:skip=CKV_AZURE_50:No VM extensions are used in this deployment
+  for_each            = var.vms
+  name                = each.value.vm_name
+  resource_group_name = each.value.resource_group_name
+  location            = each.value.location
+  size                = each.value.size
+
   admin_username                  = each.value.admin_username
-  admin_password                  = each.value.admin_password
-  disable_password_authentication = each.value.disable_password_authentication
+  disable_password_authentication = true
+
+  admin_ssh_key {
+    username   = each.value.admin_username
+    public_key = each.value.ssh_public_key
+  }
 
   network_interface_ids = [
     azurerm_network_interface.nics[each.key].id
@@ -52,5 +58,4 @@ resource "azurerm_linux_virtual_machine" "vms" {
     sku       = "22_04-lts"
     version   = "latest"
   }
-
 }

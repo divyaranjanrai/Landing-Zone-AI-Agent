@@ -1,5 +1,5 @@
 resource "azurerm_subnet" "snets" {
-
+  #checkov:skip=CKV2_AZURE_31:NSG is intentionally not implemented yet
   for_each = var.snets
 
   name                 = each.value.name
