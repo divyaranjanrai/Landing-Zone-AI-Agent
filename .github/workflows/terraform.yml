@@ -54,7 +54,7 @@ jobs:
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: ${{ env.TF_WORKING_DIR }
+          directory: ${{ env.TF_WORKING_DIR }}
 
 
   # ==================================================
