@@ -1,4 +1,5 @@
 name: Terraform CI-CD
+needs: security
 
 on:
   pull_request:
@@ -72,3 +73,38 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
+
+          security:
+    name: Security Agent
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # 1. Checkout source code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+
+      # 2. Gitleaks - Secret Detection
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+
+
+      # 3. Setup TFLint
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+
+      # 4. Run TFLint
+      - name: TFLint Scan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          tflint --init
+          tflint
+
+
+      # 5. Checkov - Terraform Security Scan
+      - name: Checkov Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ env.TF_WORKING_DIR }}
