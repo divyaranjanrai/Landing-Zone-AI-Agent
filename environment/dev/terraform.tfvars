@@ -31,7 +31,7 @@ subnets = {
 
   }
   rahul_snet2 = {
-    name                 = "database_snet"
+    name                 = "backend_snet"
     virtual_network_name = "vnet1"
     resource_group_name  = "rg1"
     address_prefixes     = ["10.0.4.0/24"]
