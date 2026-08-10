@@ -70,7 +70,7 @@ vms = {
     admin_password                  = "drr@123"
     disable_password_authentication = "false"
     private_ip_address_allocation   = "Dynamic"
-    ssh_public_key = "ssh-rsa AAAA..."
+    ssh_public_key                  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNJEfwH36j0cgVi/AnjraclnofjzGBSqm7xs3xKeH59 terraform-vm"
   }
   vm3 = {
     snet_name                       = "backend_snet"
@@ -85,6 +85,6 @@ vms = {
     admin_password                  = "P@ssw0rd!Qx7$Lm9#Yz82"
     disable_password_authentication = "false"
     private_ip_address_allocation   = "Dynamic"
-    ssh_public_key = "ssh-rsa AAAA..."
+    ssh_public_key                  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNJEfwH36j0cgVi/AnjraclnofjzGBSqm7xs3xKeH59 terraform-vm"
   }
 }
