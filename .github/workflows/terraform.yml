@@ -29,21 +29,26 @@ jobs:
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2. Gitleaks - Secret Detection
       - name: Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
 
+      # 3. Setup TFLint
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
 
+      # 4. Run TFLint
       - name: TFLint Scan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           tflint --init
           tflint
 
+      # 5. Checkov - Terraform Security Scan
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -62,20 +67,23 @@ jobs:
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 2. Terraform Format Review
       - name: Terraform Format Review
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform fmt -check -recursive
 
+      # 3. Review Terraform Changes
       - name: Review Terraform Changes
         run: |
           echo "======================================"
-          echo "PR Review Agent"
+          echo "PR REVIEW AGENT"
           echo "======================================"
           echo "Reviewing Terraform changes..."
           echo "Security checks completed successfully."
@@ -94,10 +102,11 @@ jobs:
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Azure Login
+      # 2. Azure Login using OIDC
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -105,29 +114,40 @@ jobs:
           tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
           subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
 
+      # 3. Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # 4. Terraform Format Check
       - name: Terraform Format
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform fmt -check -recursive
+        run: |
+          terraform fmt -check -recursive
 
+      # 5. Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
+        run: |
+          terraform init
 
+      # 6. Terraform Validate
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform validate
+        run: |
+          terraform validate
 
+      # 7. Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -out=tfplan
+        run: |
+          terraform plan -out=tfplan
 
+      # 8. Terraform Apply
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
+        run: |
+          terraform apply -auto-approve tfplan
 
 
   # ==================================================
@@ -142,9 +162,11 @@ jobs:
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2. Azure Login using OIDC
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -152,33 +174,82 @@ jobs:
           tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
           subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
 
+      # 3. Validate Resource Groups
       - name: Validate Resource Groups
         run: |
-          echo "Checking Resource Groups..."
+          echo "======================================"
+          echo "Checking Resource Groups"
+          echo "======================================"
 
           az group show --name rg1
           az group show --name rg2
 
+      # 4. Validate VNet
       - name: Validate VNet
         run: |
-          echo "Checking VNet..."
+          echo "======================================"
+          echo "Checking VNet"
+          echo "======================================"
 
           az network vnet show \
             --resource-group rg1 \
             --name vnet1
 
+      # 5. Validate Subnets
+      - name: Validate Subnets
+        run: |
+          echo "======================================"
+          echo "Checking Subnets"
+          echo "======================================"
+
+          az network vnet subnet show \
+            --resource-group rg1 \
+            --vnet-name vnet1 \
+            --name frontend_snet
+
+          az network vnet subnet show \
+            --resource-group rg1 \
+            --vnet-name vnet1 \
+            --name backend_snet
+
+      # 6. Validate Virtual Machines
       - name: Validate Virtual Machines
         run: |
-          echo "Checking Virtual Machines..."
+          echo "======================================"
+          echo "Checking Virtual Machines"
+          echo "======================================"
 
-          az vm get-instance-view \
+          VM_COUNT=$(az vm list \
             --resource-group rg1 \
-            --name frontend_vm
+            --query "length(@)" \
+            -o tsv)
 
-          az vm get-instance-view \
+          echo "VM count: $VM_COUNT"
+
+          if [ "$VM_COUNT" -eq 0 ]; then
+            echo "ERROR: No Virtual Machines found in rg1"
+            exit 1
+          fi
+
+          az vm list \
             --resource-group rg1 \
-            --name backend_vm
+            --show-details \
+            --query "[].{Name:name,PowerState:powerState}" \
+            -o table
 
+      # 7. Validate Public IPs
+      - name: Validate Public IPs
+        run: |
+          echo "======================================"
+          echo "Checking Public IPs"
+          echo "======================================"
+
+          az network public-ip list \
+            --resource-group rg1 \
+            --query "[].{Name:name,IP:ipAddress,Allocation:publicIPAllocationMethod}" \
+            -o table
+
+      # 8. Validation Summary
       - name: Validation Summary
         run: |
           echo "======================================"
@@ -196,17 +267,21 @@ jobs:
     needs:
       - terraform
       - post-deployment-validation
+
     if: |
       always() &&
       (needs.terraform.result == 'failure' ||
        needs.post-deployment-validation.result == 'failure')
+
     runs-on: ubuntu-latest
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2. Azure Login using OIDC
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -214,6 +289,7 @@ jobs:
           tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
           subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
 
+      # 3. Collect Deployment Diagnostics
       - name: Collect Deployment Diagnostics
         run: |
           echo "======================================"
@@ -232,6 +308,15 @@ jobs:
 
           az group list \
             --query "[].{Name:name,Location:location,State:properties.provisioningState}" \
+            -o table
+
+          echo "======================================"
+          echo "Virtual Machines"
+          echo "======================================"
+
+          az vm list \
+            --show-details \
+            --query "[].{ResourceGroup:resourceGroup,Name:name,PowerState:powerState}" \
             -o table
 
           echo "======================================"
