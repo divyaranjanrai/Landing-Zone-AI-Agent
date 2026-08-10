@@ -12,6 +12,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  pull-requests: write
 
 env:
   TF_WORKING_DIR: environment/dev
@@ -21,36 +22,28 @@ jobs:
   # ==================================================
   # SECURITY AGENT
   # ==================================================
+
   security:
     name: Security Agent
     runs-on: ubuntu-latest
 
     steps:
 
-      # 1. Checkout source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-
-      # 2. Gitleaks - Secret Detection
       - name: Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
 
-
-      # 3. Setup TFLint
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
 
-
-      # 4. Run TFLint
       - name: TFLint Scan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           tflint --init
           tflint
 
-
-      # 5. Checkov - Terraform Security Scan
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -58,21 +51,53 @@ jobs:
 
 
   # ==================================================
-  # TERRAFORM
+  # PR REVIEW AGENT
   # ==================================================
-  terraform:
-    name: Terraform
+
+  pr-review:
+    name: PR Review Agent
+    if: github.event_name == 'pull_request'
     needs: security
     runs-on: ubuntu-latest
 
     steps:
 
-      # 1. Checkout source code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Terraform Format Review
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform fmt -check -recursive
+
+      - name: Review Terraform Changes
+        run: |
+          echo "======================================"
+          echo "PR Review Agent"
+          echo "======================================"
+          echo "Reviewing Terraform changes..."
+          echo "Security checks completed successfully."
+          echo "Terraform formatting is valid."
+          echo "PR is ready for Terraform validation."
+
+
+  # ==================================================
+  # TERRAFORM AGENT
+  # ==================================================
+
+  terraform:
+    name: Terraform Agent
+    needs: security
+    runs-on: ubuntu-latest
+
+    steps:
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
-
-      # 2. Azure Login using OIDC
+      # Azure Login
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -80,38 +105,135 @@ jobs:
           tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
           subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
 
-
-      # 3. Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-
-      # 4. Terraform Format Check
       - name: Terraform Format
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
 
-
-      # 5. Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
-
-      # 6. Terraform Validate
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-
-      # 7. Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform plan -out=tfplan
 
-
-      # 8. Terraform Apply
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
+
+
+  # ==================================================
+  # POST DEPLOYMENT VALIDATION AGENT
+  # ==================================================
+
+  post-deployment-validation:
+    name: Post Deployment Validation Agent
+    needs: terraform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: "24623e13-3c30-4d95-bd03-1320e53394d9"
+          tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
+          subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
+
+      - name: Validate Resource Groups
+        run: |
+          echo "Checking Resource Groups..."
+
+          az group show --name rg1
+          az group show --name rg2
+
+      - name: Validate VNet
+        run: |
+          echo "Checking VNet..."
+
+          az network vnet show \
+            --resource-group rg1 \
+            --name vnet1
+
+      - name: Validate Virtual Machines
+        run: |
+          echo "Checking Virtual Machines..."
+
+          az vm get-instance-view \
+            --resource-group rg1 \
+            --name frontend_vm
+
+          az vm get-instance-view \
+            --resource-group rg1 \
+            --name backend_vm
+
+      - name: Validation Summary
+        run: |
+          echo "======================================"
+          echo "POST DEPLOYMENT VALIDATION"
+          echo "======================================"
+          echo "All required Azure resources validated successfully."
+
+
+  # ==================================================
+  # RCA AGENT
+  # ==================================================
+
+  rca:
+    name: RCA Agent
+    needs:
+      - terraform
+      - post-deployment-validation
+    if: |
+      always() &&
+      (needs.terraform.result == 'failure' ||
+       needs.post-deployment-validation.result == 'failure')
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: "24623e13-3c30-4d95-bd03-1320e53394d9"
+          tenant-id: "e8e1bab7-6578-4fda-8bc7-b6a7746c93f7"
+          subscription-id: "87517155-e28d-4d9b-b1ee-f212445262ff"
+
+      - name: Collect Deployment Diagnostics
+        run: |
+          echo "======================================"
+          echo "RCA AGENT"
+          echo "======================================"
+
+          echo "Terraform Job Result:"
+          echo "${{ needs.terraform.result }}"
+
+          echo "Post Deployment Validation Result:"
+          echo "${{ needs.post-deployment-validation.result }}"
+
+          echo "======================================"
+          echo "Azure Resource Groups"
+          echo "======================================"
+
+          az group list \
+            --query "[].{Name:name,Location:location,State:properties.provisioningState}" \
+            -o table
+
+          echo "======================================"
+          echo "RCA Agent completed diagnostic collection."
+          echo "Check failed job logs for detailed Terraform errors."
